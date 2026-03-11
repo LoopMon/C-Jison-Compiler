@@ -1,3 +1,15 @@
+/*
+Definição de Expressões Regulares para Tokens
+
+Na primeira parte, o aluno deverá definir expressões regulares para os tokens da linguagem, incluindo:
+- Palavras reservadas
+- Identificadores
+- Números inteiros e de ponto flutuante
+- Strings e caracteres
+- Operadores e símbolos especiais
+O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da linguagem C
+*/
+
 %lex
 %%
 
@@ -48,6 +60,8 @@
 "]" return "]";
 "{" return "{";
 "}" return "}";
+'"' return '"';
+"'" return "'";
 /* =-=-= Tipos de dados primitivos =-=-= */
 "char" return "char";
 "double" return "double";
@@ -149,6 +163,8 @@ e
 |"]" {$$ = yytext;} 
 |"{" {$$ = yytext;} 
 |"}" {$$ = yytext;} 
+|'"' {$$ = yytext;} 
+|"'" {$$ = yytext;} 
 |NUMBER {$$ = yytext;} 
 |ID {$$ = yytext;} 
 |"char" {$$ = yytext;} 
