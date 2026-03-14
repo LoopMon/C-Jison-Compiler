@@ -53,6 +53,8 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "~" return "~";
 "," return ",";
 ";" return ";";
+"?" return "?";
+":" return ":";
 "." return ".";
 "(" return "(";
 ")" return ")";
@@ -102,6 +104,7 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "#define" return "#define";
 "#include" return "#include";
 [0-9]+("."[0-9]+)? return "NUMBER";
+[a-zA-Z0-9]+"."[a-zA-Z0-9]+ return "FILE";
 [a-zA-Z"_"][a-zA-Z0-9"_"]* return "ID";
 
 <<EOF>> return "EOF";
@@ -156,6 +159,8 @@ e
 |"~" {$$ = yytext;} 
 |"," {$$ = yytext;} 
 |";" {$$ = yytext;} 
+|"?" {$$ = yytext;} 
+|":" {$$ = yytext;} 
 |"." {$$ = yytext;} 
 |"(" {$$ = yytext;} 
 |")" {$$ = yytext;} 
@@ -200,5 +205,8 @@ e
 |"const" {$$ = yytext;} 
 |"volatile" {$$ = yytext;} 
 |"#define" {$$ = yytext;} 
-|"#include" {$$ = yytext;} 
+|"#define" ID {$$ = yytext;} 
+|"#include" {$$ = yytext;}
+| FILE {$$ = yytext;}
+|"#include" "<" FILE ">" {$$ = yytext;} 
 ;
