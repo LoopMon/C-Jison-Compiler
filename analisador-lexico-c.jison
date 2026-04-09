@@ -64,6 +64,7 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "}" return "}";
 '"' return '"';
 "'" return "'";
+
 /* =-=-= Tipos de dados primitivos =-=-= */
 "char" return "char";
 "double" return "double";
@@ -74,6 +75,7 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "unsigned" return "unsigned";
 "signed" return "signed";
 "void" return "void";
+
 /* =-=-= Controle de fluxo =-=-= */
 "if" return "if";
 "else" return "else";
@@ -86,6 +88,7 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "break" return "break";
 "continue" return "continue";
 "goto" return "goto";
+
 /* =-=-= Modificadores de armazenamento =-=-= */
 "auto" return "auto";
 "extern" return "extern";
@@ -93,16 +96,20 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 "static" return "static";
 "typedef" return "typedef";
 "sizeof" return "sizeof";
+"free" return "free";
+
 /* =-=-= Manipulação de estrutura de dados =-=-= */
 "struct" return "struct";
 "union" return "union";
 "enum" return "enum";
+
 /* =-=-= Outros =-=-= */
 "return" return "return";
 "const" return "const";
 "volatile" return "volatile";
 "#define" return "#define";
 "#include" return "#include";
+
 [0-9]+("."[0-9]+)? return "NUMBER";
 [a-zA-Z0-9]+"."[a-zA-Z0-9]+ return "FILE";
 [a-zA-Z"_"][a-zA-Z0-9"_"]* return "ID";
@@ -196,6 +203,7 @@ e
 |"extern" {$$ = yytext;} 
 |"register" {$$ = yytext;} 
 |"static" {$$ = yytext;} 
+|"free" {$$ = yytext;}
 |"typedef" {$$ = yytext;} 
 |"sizeof" {$$ = yytext;} 
 |"struct" {$$ = yytext;} 
