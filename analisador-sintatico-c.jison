@@ -3,15 +3,15 @@
   Implementado com Jison (LALR)
   ─────────────────────────────────────────────────────────────
   Cobre:
-    • Declarações de variáveis e arrays
-    • Definição e declaração de funções
-    • Atribuições simples e compostas (+=, -=, *=, /=)
-    • Alocação (malloc) e desalocação (free) via chamada de função
-    • if / if-else
-    • while / do-while / for
-    • return / break / continue
-    • Operadores de comparação e lógicos (via expressão)
-    • #define / #include
+    - Declarações de variáveis e arrays
+    - Definição e declaração de funções
+    - Atribuições simples e compostas (+=, -=, *=, /=)
+    - Alocação (malloc) e desalocação (free) via chamada de função
+    - if / if-else
+    - while / do-while / for
+    - return / break / continue
+    - Operadores de comparação e lógicos (via expressão)
+    - #define / #include
 */
 
 %lex
@@ -85,9 +85,9 @@
 "*"          return '*';
 "/"          return '/';
 "%"          return '%';
-"<"          return '<';
-">"          return '>';
-"!"          return '!';
+"<"          return 'LT';
+">"          return 'GT';
+"!"          return 'NOT';
 "="          return '=';
 "&"          return '&';
 "|"          return '|';
@@ -116,9 +116,9 @@
 /lex
 
 /* ──────────────────────────────────────────────────────────────
-   Precedência e associatividade (do MENOR para o MAIOR)
-   Resolve conflitos shift/reduce em expressões
-   ────────────────────────────────────────────────────────────── */
+  Precedência e associatividade (do MENOR para o MAIOR)
+  Resolve conflitos shift/reduce em expressões
+  ────────────────────────────────────────────────────────────── */
 %right '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
 %left  OR
 %left  AND
@@ -126,11 +126,11 @@
 %left  '^'
 %left  '&'
 %left  EQ NEQ
-%left  '<' '>' LE GE
+%left  LT GT LE GE
 %left  LSHIFT RSHIFT
 %left  '+' '-'
 %left  '*' '/' '%'
-%right '!' '~' UMINUS
+%right NOT '~' UMINUS
 %left  INC DEC ARROW
 
 /* Resolve o clássico conflito do "else suspenso" (dangling else) */
@@ -141,13 +141,15 @@
 
 %%
 
-/* ══════════════════════════════════════════════════════════════
-   REGRA RAIZ
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  REGRA RAIZ
+══════════════════════════════════════════════════════════════ 
+*/
 
 program
   : statement_list EOF
-    { console.log("✅ Programa reconhecido com sucesso!"); return $1; }
+    { console.log("Programa reconhecido com sucesso!"); return $1; }
   ;
 
 statement_list
@@ -159,9 +161,9 @@ statement_list
 
 statement
   : declaration
-    { console.log("📝 Declaração encontrada");            $$ = $1; }
+    { console.log("Declaração encontrada");            $$ = $1; }
   | function_definition
-    { console.log("🔧 Definição de função encontrada");   $$ = $1; }
+    { console.log("Definição de função encontrada");   $$ = $1; }
   | assignment_stmt
     { console.log("Reconhecida atribuição");              $$ = $1; }
   | if_statement
@@ -173,35 +175,57 @@ statement
   | for_statement
     { console.log("Loop FOR identificado");               $$ = $1; }
   | return_statement
-    { console.log("↩️  Return encontrado");               $$ = $1; }
+    { console.log("  Return encontrado");               $$ = $1; }
   | break_statement
-    { console.log("⛔ Break encontrado");                  $$ = $1; }
+    { console.log("  Break encontrado");                  $$ = $1; }
   | continue_statement
-    { console.log("⏭️  Continue encontrado");             $$ = $1; }
+    { console.log("  Continue encontrado");             $$ = $1; }
   | preprocessor_directive
-    { console.log("📦 Diretiva de pré-processador");      $$ = $1; }
+    { console.log("  Diretiva de pré-processador");      $$ = $1; }
   | expression ';'
-    { console.log("📊 Expressão como instrução");         $$ = $1; }
+    { console.log("  Expressão como instrução");         $$ = $1; }
   | block
-    { console.log("📦 Bloco de código");                  $$ = $1; }
+    { console.log("Bloco de código");                  $$ = $1; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   TIPOS
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  TIPOS
+══════════════════════════════════════════════════════════════ 
+*/
 
 type
-  : INT              { $$ = 'int'; }
-  | FLOAT            { $$ = 'float'; }
-  | CHAR             { $$ = 'char'; }
-  | DOUBLE           { $$ = 'double'; }
-  | LONG             { $$ = 'long'; }
-  | SHORT            { $$ = 'short'; }
-  | VOID             { $$ = 'void'; }
-  | UNSIGNED INT     { $$ = 'unsigned int'; }
-  | UNSIGNED LONG    { $$ = 'unsigned long'; }
-  | SIGNED INT       { $$ = 'signed int'; }
-  | CONST type       { $$ = 'const ' + $2; }
+  : INT                    { $$ = "int"; }
+  | FLOAT                  { $$ = "float"; }
+  | CHAR                   { $$ = "char"; }
+  | DOUBLE                 { $$ = "double"; }
+  | LONG                   { $$ = "long"; }                    // long int
+  | LONG INT               { $$ = "long int"; }
+  | LONG LONG              { $$ = "long long"; }              // long long int
+  | LONG LONG INT          { $$ = "long long int"; }
+  | SHORT                  { $$ = "short"; }                  // short int
+  | SHORT INT              { $$ = "short int"; }
+  | VOID                   { $$ = "void"; }
+  | UNSIGNED               { $$ = "unsigned"; }               // unsigned int
+  | UNSIGNED INT           { $$ = "unsigned int"; }
+  | UNSIGNED CHAR          { $$ = "unsigned char"; }
+  | UNSIGNED SHORT         { $$ = "unsigned short"; }         // unsigned short int
+  | UNSIGNED SHORT INT     { $$ = "unsigned short int"; }
+  | UNSIGNED LONG          { $$ = "unsigned long"; }          // unsigned long int
+  | UNSIGNED LONG INT      { $$ = "unsigned long int"; }
+  | UNSIGNED LONG LONG     { $$ = "unsigned long long"; }     // unsigned long long int
+  | UNSIGNED LONG LONG INT { $$ = "unsigned long long int"; }
+  | SIGNED                 { $$ = "signed"; }                 // signed int
+  | SIGNED INT             { $$ = "signed int"; }
+  | SIGNED CHAR            { $$ = "signed char"; }
+  | SIGNED SHORT           { $$ = "signed short"; }           // signed short int
+  | SIGNED SHORT INT       { $$ = "signed short int"; }
+  | SIGNED LONG            { $$ = "signed long"; }            // signed long int
+  | SIGNED LONG INT        { $$ = "signed long int"; }
+  | SIGNED LONG LONG       { $$ = "signed long long"; }       // signed long long int
+  | SIGNED LONG LONG INT   { $$ = "signed long long int"; }
+  | LONG DOUBLE            { $$ = "long double"; }
+  | CONST type             { $$ = "const " + $2; }
   ;
 
 /* ══════════════════════════════════════════════════════════════
