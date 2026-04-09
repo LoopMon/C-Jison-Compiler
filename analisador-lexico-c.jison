@@ -123,8 +123,13 @@ O objetivo é garantir que o lexer consiga reconhecer corretamente os tokens da 
 %%
 
 tokens
-: e EOF { return $1; }
-| INVALID { throw new Error("Token Inválido") }
+: token_list EOF { return $1; }
+;
+
+token_list
+: /* vazio */ { $$ = []; }
+| token_list e { $$ = $1.concat([{ token: $2, lexeme: yytext }]); }
+| token_list INVALID { throw new Error("Token Inválido: " + yytext); }
 ;
 
 e
