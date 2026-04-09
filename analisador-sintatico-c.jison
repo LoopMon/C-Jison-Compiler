@@ -308,6 +308,9 @@ function_definition
   | type '*' ID '(' param_list ')' block
     { console.log("  → Função definida (retorna ponteiro): " + $3 + "()");
       $$ = { type: 'function', returnType: $1 + '*', name: $3, params: $5, body: $7 }; }
+  | type ID '(' param_list ')' ';'
+    { console.log("  → Protótipo de Função: " + $2 + "()");
+      $$ = { type: 'function', returnType: $1, name: $2, params: $4, body: 'none' }; }
   ;
 
 /* 
@@ -467,7 +470,7 @@ preprocessor_directive
     { console.log("  → #define flag: " + $2);
       $$ = { type: 'define', name: $2, value: null }; }
 
-  | INCLUDE '<' ID '>'
+  | INCLUDE LT ID GT
     { console.log("  → #include sistema: <" + $3 + ">");
       $$ = { type: 'include', file: $3, system: true }; }
 
@@ -524,9 +527,9 @@ expression
     { console.log("    → Operador =="); $$ = { type: '==', left: $1, right: $3 }; }
   | expression NEQ expression
     { console.log("    → Operador !="); $$ = { type: '!=', left: $1, right: $3 }; }
-  | expression '<'  expression
+  | expression LT  expression
     { console.log("    → Operador <");  $$ = { type: '<',  left: $1, right: $3 }; }
-  | expression '>'  expression
+  | expression GT  expression
     { console.log("    → Operador >");  $$ = { type: '>',  left: $1, right: $3 }; }
   | expression LE   expression
     { console.log("    → Operador <="); $$ = { type: '<=', left: $1, right: $3 }; }
@@ -538,7 +541,7 @@ expression
     { console.log("    → Operador &&"); $$ = { type: '&&', left: $1, right: $3 }; }
   | expression OR  expression
     { console.log("    → Operador ||"); $$ = { type: '||', left: $1, right: $3 }; }
-  | '!' expression
+  | NOT expression
     { $$ = { type: '!', expr: $2 }; }
 
   /* ── Unários ───────────────────────────────────────────────── */
