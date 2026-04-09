@@ -228,39 +228,64 @@ type
   | CONST type             { $$ = "const " + $2; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   DECLARAÇÕES DE VARIÁVEIS
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  DECLARAÇÕES DE VARIÁVEIS
+══════════════════════════════════════════════════════════════ 
+*/
 
 declaration
-  : type ID ';'
-    { console.log("  → Declaração simples: " + $2);
-      $$ = { type: 'declaration', varType: $1, name: $2 }; }
-
-  | type ID '=' expression ';'
-    { console.log("  → Declaração com inicialização: " + $2);
-      $$ = { type: 'declaration', varType: $1, name: $2, init: $4 }; }
-
-  | type '*' ID ';'
-    { console.log("  → Declaração de ponteiro: *" + $3);
-      $$ = { type: 'declaration', varType: $1 + '*', name: $3 }; }
-
-  | type '*' ID '=' expression ';'
-    { console.log("  → Declaração de ponteiro com valor: *" + $3);
-      $$ = { type: 'declaration', varType: $1 + '*', name: $3, init: $5 }; }
-
-  | type ID '[' expression ']' ';'
-    { console.log("  → Declaração de array: " + $2 + "[...]");
-      $$ = { type: 'array_declaration', varType: $1, name: $2, size: $4 }; }
-
-  | type ID '[' ']' ';'
-    { console.log("  → Declaração de array sem tamanho: " + $2 + "[]");
-      $$ = { type: 'array_declaration', varType: $1, name: $2, size: null }; }
+  : type declarator_list ';'
+    { console.log("  → Declaração múltipla");
+      $$ = { type: 'declaration', varType: $1, declarators: $2 }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   FUNÇÕES
-   ══════════════════════════════════════════════════════════════ */
+declarator_list
+  : declarator
+    { $$ = [$1]; }
+  | declarator_list ',' declarator
+    { $$ = $1.concat([$3]); }
+  ;
+
+declarator
+  : ID
+    { console.log("    → Variável: " + $1);
+      $$ = { type: 'variable', name: $1, init: null, size: null }; }
+  | ID '=' expression
+    { console.log("    → Variável com inicialização: " + $1);
+      $$ = { type: 'variable', name: $1, init: $3, size: null }; }
+  | '*' ID
+    { console.log("    → Ponteiro: *" + $2);
+      $$ = { type: 'pointer', name: $2, init: null, size: null }; }
+  | '*' ID '=' expression
+    { console.log("    → Ponteiro com inicialização: *" + $2);
+      $$ = { type: 'pointer', name: $2, init: $4, size: null }; }
+  | ID '[' expression ']'
+    { console.log("    → Array: " + $1 + "[...]");
+      $$ = { type: 'array', name: $1, size: $3, init: null }; }
+  | ID '[' ']'
+    { console.log("    → Array sem tamanho: " + $1 + "[]");
+      $$ = { type: 'array', name: $1, size: null, init: null }; }
+  | ID '[' ']' '=' '{' initializer_list '}'
+    { console.log("    → Array sem tamanho com inicialização: " + $1 + "[] = {...}");
+      $$ = { type: 'array', name: $1, size: null, init: $6 }; }
+  | ID '[' expression ']' '=' '{' initializer_list '}'
+    { console.log("    → Array com tamanho e inicialização: " + $1 + "[...] = {...}");
+      $$ = { type: 'array', name: $1, size: $3, init: $7 }; }
+  ;
+
+initializer_list
+  : expression
+    { $$ = [$1]; }
+  | initializer_list ',' expression
+    { $$ = $1.concat([$3]); }
+  ;
+
+/* 
+══════════════════════════════════════════════════════════════
+  FUNÇÕES
+══════════════════════════════════════════════════════════════ 
+*/
 
 param_list
   : /* vazio */               { $$ = []; }
@@ -285,11 +310,13 @@ function_definition
       $$ = { type: 'function', returnType: $1 + '*', name: $3, params: $5, body: $7 }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   ATRIBUIÇÕES
-   Obs.: malloc() e free() são cobertos pela regra
-         expression → ID '(' arg_list ')'  (chamada de função)
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  ATRIBUIÇÕES
+  Obs.: malloc() e free() são cobertos pela regra
+    expression → ID '(' arg_list ')'  (chamada de função)
+══════════════════════════════════════════════════════════════ 
+*/
 
 assignment_stmt
   : ID '=' expression ';'
@@ -321,10 +348,12 @@ assignment_stmt
       $$ = { type: 'assignment', target: $1, op: '/=', value: $3 }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   ESTRUTURAS CONDICIONAIS
-   %prec LOWER_THAN_ELSE resolve o "dangling else"
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  ESTRUTURAS CONDICIONAIS
+  %prec LOWER_THAN_ELSE resolve o "dangling else"
+══════════════════════════════════════════════════════════════ 
+*/
 
 if_statement
   : IF '(' expression ')' statement %prec LOWER_THAN_ELSE
@@ -336,9 +365,11 @@ if_statement
       $$ = { type: 'if_else', condition: $3, then: $5, else: $7 }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   ESTRUTURAS DE REPETIÇÃO
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  ESTRUTURAS DE REPETIÇÃO
+══════════════════════════════════════════════════════════════ 
+*/
 
 while_statement
   : WHILE '(' expression ')' statement
@@ -396,9 +427,11 @@ for_update
     { $$ = $1; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   COMANDOS DE CONTROLE
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  COMANDOS DE CONTROLE
+══════════════════════════════════════════════════════════════ 
+*/
 
 return_statement
   : RETURN ';'
@@ -419,9 +452,11 @@ continue_statement
     { console.log("  → Continue"); $$ = { type: 'continue' }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   DIRETIVAS DE PRÉ-PROCESSADOR
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  DIRETIVAS DE PRÉ-PROCESSADOR
+══════════════════════════════════════════════════════════════ 
+*/
 
 preprocessor_directive
   : DEFINE ID expression
@@ -441,12 +476,14 @@ preprocessor_directive
       $$ = { type: 'include', file: $2, system: false }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   EXPRESSÕES
-   Inclui operadores de comparação e lógicos com precedência
-   declarada no cabeçalho — evita regra "condition" separada
-   e os conflitos que ela gerava.
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  EXPRESSÕES
+  Inclui operadores de comparação e lógicos com precedência
+  declarada no cabeçalho — evita regra "condition" separada
+  e os conflitos que ela gerava.
+══════════════════════════════════════════════════════════════ 
+*/
 
 arg_list
   : /* vazio */               { $$ = []; }
@@ -535,9 +572,11 @@ expression
     { console.log("    → sizeof variável"); $$ = { type: 'sizeof', arg: $3 }; }
   ;
 
-/* ══════════════════════════════════════════════════════════════
-   BLOCO
-   ══════════════════════════════════════════════════════════════ */
+/* 
+══════════════════════════════════════════════════════════════
+  BLOCO
+══════════════════════════════════════════════════════════════ 
+*/
 
 block
   : '{' statement_list '}'
