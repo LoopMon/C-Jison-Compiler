@@ -3,15 +3,23 @@
   Implementado com Jison (LALR)
   ─────────────────────────────────────────────────────────────
   Cobre:
-    - Declarações de variáveis e arrays
-    - Definição e declaração de funções
-    - Atribuições simples e compostas (+=, -=, *=, /=)
-    - Alocação (malloc) e desalocação (free) via chamada de função
-    - if / if-else
-    - while / do-while / for
+    - Declarações: variáveis, arrays 1D/2D (matrizes), ponteiros simples e duplos
+    - Inicializadores: {1,2,3}, {{1,2},{3,4}}, "string"
+    - struct / union / enum / typedef (inclui uso de alias typedef como especificador de tipo)
+    - Qualificadores: const, static, extern, volatile, register
+    - Definição e declaração de funções (incluindo protótipos)
+    - Parâmetros: tipo, ponteiro, array, ponteiro para array (char *argv[])
+    - Atribuições como expressões: =, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
+    - Cast de tipos: (int *)malloc(...), (struct Node *)calloc(...)
+    - Alocação / desalocação: malloc, calloc, realloc, free
+    - if / if-else / switch / case / default / goto
+    - while / do-while / for (com declarações múltiplas e comma update)
     - return / break / continue
-    - Operadores de comparação e lógicos (via expressão)
-    - #define / #include
+    - Operadores: aritméticos, comparação, lógicos, bitwise, sizeof
+    - sizeof: sizeof(type), sizeof(type *), sizeof(expression)
+    - Incremento/decremento: pré e pós em qualquer lvalue
+    - Acesso a membro: expr.campo  e  expr->campo
+    - #define / #include (caminhos com ponto e barra: sys/types.h)
 */
 
 %lex
@@ -50,13 +58,16 @@
 "signed"     return 'SIGNED';
 "void"       return 'VOID';
 
-/* ── Modificadores ─────────────────────────────────────────── */
+/* ── Modificadores e tipos compostos ───────────────────────── */
 "const"      return 'CONST';
 "static"     return 'STATIC';
 "extern"     return 'EXTERN';
 "volatile"   return 'VOLATILE';
+"register"   return 'REGISTER';
 "sizeof"     return 'SIZEOF';
 "struct"     return 'STRUCT';
+"union"      return 'UNION';
+"enum"       return 'ENUM';
 "typedef"    return 'TYPEDEF';
 
 /* ── Operadores compostos (mais longos primeiro) ───────────── */
@@ -67,6 +78,9 @@
 "*="         return 'MUL_ASSIGN';
 "/="         return 'DIV_ASSIGN';
 "%="         return 'MOD_ASSIGN';
+"&="         return 'AND_ASSIGN';
+"|="         return 'OR_ASSIGN';
+"^="         return 'XOR_ASSIGN';
 "++"         return 'INC';
 "--"         return 'DEC';
 "<<"         return 'LSHIFT';
@@ -95,31 +109,34 @@
 "~"          return '~';
 ","          return ',';
 ";"          return ';';
+":"          return ':';
 "("          return '(';
 ")"          return ')';
 "["          return '[';
 "]"          return ']';
 "{"          return '{';
 "}"          return '}';
+"."          return '.';
 
 /* ── Literais ──────────────────────────────────────────────── */
-[0-9]+(\.[0-9]+)?    return 'NUMBER';
-\"[^\"]*\"           return 'STRING';
-\'[^\']*\'           return 'CHAR_LIT';
+0[xX][0-9a-fA-F]+   return 'NUMBER';
+[0-9]+(\.[0-9]+)?   return 'NUMBER';
+\"[^\"]*\"          return 'STRING';
+\'[^\']*\'          return 'CHAR_LIT';
 
-/* ID: aceita ponto para suportar nomes de arquivo (stdio.h) */
-[a-zA-Z_][a-zA-Z0-9_.]*   return 'ID';
+[a-zA-Z_][a-zA-Z0-9_]*   return 'ID';
 
 <<EOF>>      return 'EOF';
 .            return 'INVALID';
 
 /lex
 
-/* ──────────────────────────────────────────────────────────────
+/*
+──────────────────────────────────────────────────────────────
   Precedência e associatividade (do MENOR para o MAIOR)
-  Resolve conflitos shift/reduce em expressões
-  ────────────────────────────────────────────────────────────── */
-%right '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
+────────────────────────────────────────────────────────────── 
+*/
+%right '=' ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN AND_ASSIGN OR_ASSIGN XOR_ASSIGN LSHIFT_ASSIGN RSHIFT_ASSIGN
 %left  OR
 %left  AND
 %left  '|'
@@ -130,10 +147,9 @@
 %left  LSHIFT RSHIFT
 %left  '+' '-'
 %left  '*' '/' '%'
-%right NOT '~' UMINUS
-%left  INC DEC ARROW
+%right NOT '~' UMINUS DEREF ADDR
+%left  INC DEC ARROW '.' '['
 
-/* Resolve o clássico conflito do "else suspenso" (dangling else) */
 %nonassoc LOWER_THAN_ELSE
 %nonassoc ELSE
 
@@ -141,10 +157,10 @@
 
 %%
 
-/* 
+/*
 ══════════════════════════════════════════════════════════════
   REGRA RAIZ
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 program
@@ -161,37 +177,49 @@ statement_list
 
 statement
   : declaration
-    { console.log("Declaração encontrada");            $$ = $1; }
+    { console.log("Declaração encontrada");              $$ = $1; }
+  | struct_definition
+    { console.log("Definição de struct encontrada");     $$ = $1; }
+  | union_definition
+    { console.log("Definição de union encontrada");      $$ = $1; }
+  | enum_definition
+    { console.log("Definição de enum encontrada");       $$ = $1; }
+  | typedef_declaration
+    { console.log("Typedef encontrado");                 $$ = $1; }
   | function_definition
-    { console.log("Definição de função encontrada");   $$ = $1; }
-  | assignment_stmt
-    { console.log("Reconhecida atribuição");              $$ = $1; }
+    { console.log("Definição de função encontrada");     $$ = $1; }
   | if_statement
-    { console.log("Entrou em estrutura IF");              $$ = $1; }
+    { console.log("Entrou em estrutura IF");             $$ = $1; }
+  | switch_statement
+    { console.log("Entrou em estrutura SWITCH");         $$ = $1; }
   | while_statement
-    { console.log("Loop WHILE identificado");             $$ = $1; }
+    { console.log("Loop WHILE identificado");            $$ = $1; }
   | do_while_statement
-    { console.log("Loop DO-WHILE identificado");          $$ = $1; }
+    { console.log("Loop DO-WHILE identificado");         $$ = $1; }
   | for_statement
-    { console.log("Loop FOR identificado");               $$ = $1; }
+    { console.log("Loop FOR identificado");              $$ = $1; }
   | return_statement
-    { console.log("  Return encontrado");               $$ = $1; }
+    { console.log("  Return encontrado");                $$ = $1; }
   | break_statement
-    { console.log("  Break encontrado");                  $$ = $1; }
+    { console.log("  Break encontrado");                 $$ = $1; }
   | continue_statement
-    { console.log("  Continue encontrado");             $$ = $1; }
+    { console.log("  Continue encontrado");              $$ = $1; }
+  | goto_statement
+    { console.log("  Goto encontrado");                  $$ = $1; }
+  | label_statement
+    { console.log("  Label encontrado");                 $$ = $1; }
   | preprocessor_directive
     { console.log("  Diretiva de pré-processador");      $$ = $1; }
   | expression ';'
     { console.log("  Expressão como instrução");         $$ = $1; }
   | block
-    { console.log("Bloco de código");                  $$ = $1; }
+    { console.log("Bloco de código");                    $$ = $1; }
   ;
 
-/* 
+/*
 ══════════════════════════════════════════════════════════════
   TIPOS
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 type
@@ -199,44 +227,54 @@ type
   | FLOAT                  { $$ = "float"; }
   | CHAR                   { $$ = "char"; }
   | DOUBLE                 { $$ = "double"; }
-  | LONG                   { $$ = "long"; }                    // long int
+  | LONG                   { $$ = "long"; }
   | LONG INT               { $$ = "long int"; }
-  | LONG LONG              { $$ = "long long"; }              // long long int
+  | LONG LONG              { $$ = "long long"; }
   | LONG LONG INT          { $$ = "long long int"; }
-  | SHORT                  { $$ = "short"; }                  // short int
+  | SHORT                  { $$ = "short"; }
   | SHORT INT              { $$ = "short int"; }
   | VOID                   { $$ = "void"; }
-  | UNSIGNED               { $$ = "unsigned"; }               // unsigned int
+  | UNSIGNED               { $$ = "unsigned"; }
   | UNSIGNED INT           { $$ = "unsigned int"; }
   | UNSIGNED CHAR          { $$ = "unsigned char"; }
-  | UNSIGNED SHORT         { $$ = "unsigned short"; }         // unsigned short int
+  | UNSIGNED SHORT         { $$ = "unsigned short"; }
   | UNSIGNED SHORT INT     { $$ = "unsigned short int"; }
-  | UNSIGNED LONG          { $$ = "unsigned long"; }          // unsigned long int
+  | UNSIGNED LONG          { $$ = "unsigned long"; }
   | UNSIGNED LONG INT      { $$ = "unsigned long int"; }
-  | UNSIGNED LONG LONG     { $$ = "unsigned long long"; }     // unsigned long long int
+  | UNSIGNED LONG LONG     { $$ = "unsigned long long"; }
   | UNSIGNED LONG LONG INT { $$ = "unsigned long long int"; }
-  | SIGNED                 { $$ = "signed"; }                 // signed int
+  | SIGNED                 { $$ = "signed"; }
   | SIGNED INT             { $$ = "signed int"; }
   | SIGNED CHAR            { $$ = "signed char"; }
-  | SIGNED SHORT           { $$ = "signed short"; }           // signed short int
+  | SIGNED SHORT           { $$ = "signed short"; }
   | SIGNED SHORT INT       { $$ = "signed short int"; }
-  | SIGNED LONG            { $$ = "signed long"; }            // signed long int
+  | SIGNED LONG            { $$ = "signed long"; }
   | SIGNED LONG INT        { $$ = "signed long int"; }
-  | SIGNED LONG LONG       { $$ = "signed long long"; }       // signed long long int
+  | SIGNED LONG LONG       { $$ = "signed long long"; }
   | SIGNED LONG LONG INT   { $$ = "signed long long int"; }
   | LONG DOUBLE            { $$ = "long double"; }
   | CONST type             { $$ = "const " + $2; }
+  | STATIC type            { $$ = "static " + $2; }
+  | EXTERN type            { $$ = "extern " + $2; }
+  | VOLATILE type          { $$ = "volatile " + $2; }
+  | REGISTER type          { $$ = "register " + $2; }
+  | STRUCT ID              { $$ = "struct " + $2; }
+  | UNION  ID              { $$ = "union "  + $2; }
+  | ENUM   ID              { $$ = "enum "   + $2; }
   ;
 
-/* 
+/*
 ══════════════════════════════════════════════════════════════
   DECLARAÇÕES DE VARIÁVEIS
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 declaration
   : type declarator_list ';'
-    { console.log("  → Declaração múltipla");
+    { console.log("  → Declaração: tipo=" + $1);
+      $$ = { type: 'declaration', varType: $1, declarators: $2 }; }
+  | ID declarator_list ';'
+    { console.log("  → Declaração (typedef): tipo=" + $1);
       $$ = { type: 'declaration', varType: $1, declarators: $2 }; }
   ;
 
@@ -250,16 +288,35 @@ declarator_list
 declarator
   : ID
     { console.log("    → Variável: " + $1);
-      $$ = { type: 'variable', name: $1, init: null, size: null }; }
+      $$ = { type: 'variable', name: $1, init: null }; }
   | ID '=' expression
-    { console.log("    → Variável com inicialização: " + $1);
-      $$ = { type: 'variable', name: $1, init: $3, size: null }; }
+    { console.log("    → Variável com init: " + $1);
+      $$ = { type: 'variable', name: $1, init: $3 }; }
+  
+  | ID '=' '{' initializer_list '}'
+    { console.log("    → Variável com init (chaves): " + $1);
+      $$ = { type: 'variable', name: $1, init: { type: 'init_list', values: $4 } }; }
+
   | '*' ID
     { console.log("    → Ponteiro: *" + $2);
-      $$ = { type: 'pointer', name: $2, init: null, size: null }; }
+      $$ = { type: 'pointer', name: $2, init: null }; }
   | '*' ID '=' expression
-    { console.log("    → Ponteiro com inicialização: *" + $2);
-      $$ = { type: 'pointer', name: $2, init: $4, size: null }; }
+    { console.log("    → Ponteiro com init: *" + $2);
+      $$ = { type: 'pointer', name: $2, init: $4 }; }
+  | '*' ID '=' '{' initializer_list '}'
+    { console.log("    → Ponteiro com init (chaves): *" + $2);
+      $$ = { type: 'pointer', name: $2, init: { type: 'init_list', values: $5 } }; }
+
+  | '*' '*' ID
+    { console.log("    → Ponteiro duplo: **" + $3);
+      $$ = { type: 'double_pointer', name: $3, init: null }; }
+  | '*' '*' ID '=' expression
+    { console.log("    → Ponteiro duplo com init: **" + $3);
+      $$ = { type: 'double_pointer', name: $3, init: $5 }; }
+  | '*' '*' ID '=' '{' initializer_list '}'
+    { console.log("    → Ponteiro duplo com init (chaves): **" + $3);
+      $$ = { type: 'double_pointer', name: $3, init: { type: 'init_list', values: $6 } }; }
+
   | ID '[' expression ']'
     { console.log("    → Array: " + $1 + "[...]");
       $$ = { type: 'array', name: $1, size: $3, init: null }; }
@@ -267,24 +324,47 @@ declarator
     { console.log("    → Array sem tamanho: " + $1 + "[]");
       $$ = { type: 'array', name: $1, size: null, init: null }; }
   | ID '[' ']' '=' '{' initializer_list '}'
-    { console.log("    → Array sem tamanho com inicialização: " + $1 + "[] = {...}");
+    { console.log("    → Array com init (braces): " + $1 + "[] = {...}");
       $$ = { type: 'array', name: $1, size: null, init: $6 }; }
+  | ID '[' ']' '=' expression
+    { console.log("    → Array com init (expr): " + $1 + "[] = expr");
+      $$ = { type: 'array', name: $1, size: null, init: $5 }; }
   | ID '[' expression ']' '=' '{' initializer_list '}'
-    { console.log("    → Array com tamanho e inicialização: " + $1 + "[...] = {...}");
+    { console.log("    → Array com tamanho e init (braces): " + $1 + "[...] = {...}");
       $$ = { type: 'array', name: $1, size: $3, init: $7 }; }
+  | ID '[' expression ']' '=' expression
+    { console.log("    → Array com tamanho e init (expr): " + $1 + "[...] = expr");
+      $$ = { type: 'array', name: $1, size: $3, init: $6 }; }
+
+  | ID '[' expression ']' '[' expression ']'
+    { console.log("    → Matriz: " + $1 + "[...][...]");
+      $$ = { type: 'matrix', name: $1, rows: $3, cols: $6, init: null }; }
+  | ID '[' expression ']' '[' expression ']' '=' '{' initializer_list '}'
+    { console.log("    → Matriz com init: " + $1 + "[...][...] = {...}");
+      $$ = { type: 'matrix', name: $1, rows: $3, cols: $6, init: $10 }; }
+  | ID '[' ']' '[' expression ']'
+    { console.log("    → Matriz (parâmetro): " + $1 + "[][...]");
+      $$ = { type: 'matrix', name: $1, rows: null, cols: $5, init: null }; }
   ;
 
 initializer_list
-  : expression
+  : initializer
     { $$ = [$1]; }
-  | initializer_list ',' expression
+  | initializer_list ',' initializer
     { $$ = $1.concat([$3]); }
   ;
 
-/* 
+initializer
+  : expression
+    { $$ = $1; }
+  | '{' initializer_list '}'
+    { $$ = { type: 'init_list', values: $2 }; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   FUNÇÕES
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 param_list
@@ -294,84 +374,223 @@ param_list
   ;
 
 param
-  : type ID                   { $$ = { paramType: $1, name: $2 }; }
-  | type '*' ID               { $$ = { paramType: $1 + '*', name: $3 }; }
-  | type ID '[' ']'           { $$ = { paramType: $1 + '[]', name: $2 }; }
-  | VOID                      { $$ = { paramType: 'void', name: '' }; }
+  : type ID
+    { $$ = { paramType: $1, name: $2 }; }
+  | type '*' ID
+    { $$ = { paramType: $1 + '*', name: $3 }; }
+  | type '*' '*' ID
+    { $$ = { paramType: $1 + '**', name: $4 }; }
+  | type ID '[' ']'
+    { $$ = { paramType: $1 + '[]', name: $2 }; }
+  | type ID '[' ']' '[' expression ']'
+    { $$ = { paramType: $1 + '[][]', name: $2 }; }
+  | type '*' ID '[' ']'
+    { $$ = { paramType: $1 + '*[]', name: $3 }; }
   ;
 
 function_definition
-  : type ID '(' param_list ')' block
-    { console.log("  → Função definida: " + $2 + "()");
+  : type ID '(' VOID ')' block
+    { console.log("  → Função (void): " + $2 + "()");
+      $$ = { type: 'function', returnType: $1, name: $2, params: [], body: $6 }; }
+  | type '*' ID '(' VOID ')' block
+    { console.log("  → Função ptr (void): " + $3 + "()");
+      $$ = { type: 'function', returnType: $1 + '*', name: $3, params: [], body: $7 }; }
+  | type ID '(' VOID ')' ';'
+    { console.log("  → Protótipo (void): " + $2 + "()");
+      $$ = { type: 'prototype', returnType: $1, name: $2, params: [] }; }
+  | type '*' ID '(' VOID ')' ';'
+    { console.log("  → Protótipo ptr (void): " + $3 + "()");
+      $$ = { type: 'prototype', returnType: $1 + '*', name: $3, params: [] }; }
+  | type ID '(' param_list ')' block
+    { console.log("  → Função: " + $2 + "()");
       $$ = { type: 'function', returnType: $1, name: $2, params: $4, body: $6 }; }
-
   | type '*' ID '(' param_list ')' block
-    { console.log("  → Função definida (retorna ponteiro): " + $3 + "()");
+    { console.log("  → Função (retorna ponteiro): " + $3 + "()");
       $$ = { type: 'function', returnType: $1 + '*', name: $3, params: $5, body: $7 }; }
   | type ID '(' param_list ')' ';'
-    { console.log("  → Protótipo de Função: " + $2 + "()");
-      $$ = { type: 'function', returnType: $1, name: $2, params: $4, body: 'none' }; }
+    { console.log("  → Protótipo: " + $2 + "()");
+      $$ = { type: 'prototype', returnType: $1, name: $2, params: $4 }; }
+  | type '*' ID '(' param_list ')' ';'
+    { console.log("  → Protótipo (ponteiro): " + $3 + "()");
+      $$ = { type: 'prototype', returnType: $1 + '*', name: $3, params: $5 }; }
   ;
 
-/* 
+/*
 ══════════════════════════════════════════════════════════════
-  ATRIBUIÇÕES
-  Obs.: malloc() e free() são cobertos pela regra
-    expression → ID '(' arg_list ')'  (chamada de função)
-══════════════════════════════════════════════════════════════ 
+  STRUCT
+══════════════════════════════════════════════════════════════
 */
 
-assignment_stmt
-  : ID '=' expression ';'
-    { console.log("  → Atribuição: " + $1 + " = ...");
-      $$ = { type: 'assignment', target: $1, op: '=', value: $3 }; }
-
-  | ID '[' expression ']' '=' expression ';'
-    { console.log("  → Atribuição em array: " + $1 + "[...]");
-      $$ = { type: 'array_assign', array: $1, index: $3, value: $6 }; }
-
-  | '*' ID '=' expression ';'
-    { console.log("  → Atribuição via derreferência: *" + $2);
-      $$ = { type: 'deref_assign', ptr: $2, value: $4 }; }
-
-  | ID ADD_ASSIGN expression ';'
-    { console.log("  → Atribuição composta +=: " + $1);
-      $$ = { type: 'assignment', target: $1, op: '+=', value: $3 }; }
-
-  | ID SUB_ASSIGN expression ';'
-    { console.log("  → Atribuição composta -=: " + $1);
-      $$ = { type: 'assignment', target: $1, op: '-=', value: $3 }; }
-
-  | ID MUL_ASSIGN expression ';'
-    { console.log("  → Atribuição composta *=: " + $1);
-      $$ = { type: 'assignment', target: $1, op: '*=', value: $3 }; }
-
-  | ID DIV_ASSIGN expression ';'
-    { console.log("  → Atribuição composta /=: " + $1);
-      $$ = { type: 'assignment', target: $1, op: '/=', value: $3 }; }
+struct_definition
+  : STRUCT ID '{' struct_member_list '}' ';'
+    { console.log("  → Struct definida: struct " + $2);
+      $$ = { type: 'struct_def', name: $2, members: $4 }; }
+  | STRUCT ID ID "=" '{' struct_member_values '}' ';'
+    { console.log("  → Struct definida: struct " + $2);
+      $$ = { type: 'struct_def', name: $2, members: $4 }; }
+  | STRUCT ID '{' struct_member_list '}' declarator_list ';'
+    { console.log("  → Struct com variável: struct " + $2);
+      $$ = { type: 'struct_def', name: $2, members: $4, vars: $6 }; }
+  | STRUCT '{' struct_member_list '}' declarator_list ';'
+    { console.log("  → Struct anônima com variável");
+      $$ = { type: 'struct_def', name: null, members: $3, vars: $5 }; }
   ;
 
-/* 
+struct_member_values
+: struct_member_v
+    { $$ = [$1]; }
+  | struct_member_values "," struct_member_v
+    { $$ = $1.concat([$2]); }
+;
+
+struct_member_v
+: NUMBER
+  { $$ = { name: $1, value: null }; }
+| STRING
+  { $$ = { name: $1, value: null }; }
+;
+
+/*
+══════════════════════════════════════════════════════════════
+  UNION
+══════════════════════════════════════════════════════════════
+*/
+
+union_definition
+  : UNION ID '{' struct_member_list '}' ';'
+    { console.log("  → Union definida: union " + $2);
+      $$ = { type: 'union_def', name: $2, members: $4 }; }
+  | UNION ID '{' struct_member_list '}' declarator_list ';'
+    { console.log("  → Union com variável: union " + $2);
+      $$ = { type: 'union_def', name: $2, members: $4, vars: $6 }; }
+  | UNION '{' struct_member_list '}' declarator_list ';'
+    { console.log("  → Union anônima com variável");
+      $$ = { type: 'union_def', name: null, members: $3, vars: $5 }; }
+  ;
+
+struct_member_list
+  : /* vazio */
+    { $$ = []; }
+  | struct_member_list struct_member
+    { $$ = $1.concat([$2]); }
+  ;
+
+struct_member
+  : type declarator_list ';'
+    { $$ = { type: 'member', varType: $1, declarators: $2 }; }
+  ;
+
+/*
+══════════════════════════════════════════════════════════════
+  ENUM
+══════════════════════════════════════════════════════════════
+*/
+
+enum_definition
+  : ENUM ID '{' enum_member_list '}' ';'
+    { console.log("  → Enum definida: enum " + $2);
+      $$ = { type: 'enum_def', name: $2, members: $4 }; }
+  | ENUM ID '{' enum_member_list '}' declarator_list ';'
+    { console.log("  → Enum com variável: enum " + $2);
+      $$ = { type: 'enum_def', name: $2, members: $4, vars: $6 }; }
+  | ENUM '{' enum_member_list '}' ';'
+    { console.log("  → Enum anônima");
+      $$ = { type: 'enum_def', name: null, members: $3 }; }
+  | ENUM '{' enum_member_list '}' declarator_list ';'
+    { console.log("  → Enum anônima com variável");
+      $$ = { type: 'enum_def', name: null, members: $3, vars: $5 }; }
+  ;
+
+enum_member_list
+  : enum_member
+    { $$ = [$1]; }
+  | enum_member_list ',' enum_member
+    { $$ = $1.concat([$3]); }
+  | enum_member_list ','
+    { $$ = $1; }
+  ;
+
+enum_member
+  : ID
+    { $$ = { name: $1, value: null }; }
+  | ID '=' expression
+    { $$ = { name: $1, value: $3 }; }
+  ;
+
+/*
+══════════════════════════════════════════════════════════════
+  TYPEDEF
+══════════════════════════════════════════════════════════════
+*/
+
+typedef_declaration
+  : TYPEDEF type ID ';'
+    { console.log("  → Typedef simples: " + $3);
+      $$ = { type: 'typedef', base: $2, alias: $3 }; }
+  | TYPEDEF type '*' ID ';'
+    { console.log("  → Typedef ponteiro: " + $4);
+      $$ = { type: 'typedef', base: $2 + '*', alias: $4 }; }
+  | TYPEDEF STRUCT '{' struct_member_list '}' ID ';'
+    { console.log("  → Typedef struct anônima: " + $6);
+      $$ = { type: 'typedef_struct', name: null, members: $4, alias: $6 }; }
+  | TYPEDEF STRUCT ID '{' struct_member_list '}' ID ';'
+    { console.log("  → Typedef struct: " + $7);
+      $$ = { type: 'typedef_struct', name: $3, members: $5, alias: $7 }; }
+  | TYPEDEF UNION '{' struct_member_list '}' ID ';'
+    { console.log("  → Typedef union anônima: " + $6);
+      $$ = { type: 'typedef_union', name: null, members: $4, alias: $6 }; }
+  | TYPEDEF ENUM '{' enum_member_list '}' ID ';'
+    { console.log("  → Typedef enum anônima: " + $6);
+      $$ = { type: 'typedef_enum', name: null, members: $4, alias: $6 }; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   ESTRUTURAS CONDICIONAIS
-  %prec LOWER_THAN_ELSE resolve o "dangling else"
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 if_statement
   : IF '(' expression ')' statement %prec LOWER_THAN_ELSE
     { console.log("Entrou em estrutura IF");
       $$ = { type: 'if', condition: $3, then: $5 }; }
-
   | IF '(' expression ')' statement ELSE statement
     { console.log("Entrou em estrutura IF-ELSE");
       $$ = { type: 'if_else', condition: $3, then: $5, else: $7 }; }
   ;
 
-/* 
+/*
+══════════════════════════════════════════════════════════════
+  SWITCH / CASE / DEFAULT
+══════════════════════════════════════════════════════════════
+*/
+
+switch_statement
+  : SWITCH '(' expression ')' '{' case_list '}'
+    { console.log("Estrutura SWITCH reconhecida");
+      $$ = { type: 'switch', condition: $3, cases: $6 }; }
+  ;
+
+case_list
+  : /* vazio */
+    { $$ = []; }
+  | case_list case_clause
+    { $$ = $1.concat([$2]); }
+  ;
+
+case_clause
+  : CASE expression ':' statement_list
+    { console.log("  → case");
+      $$ = { type: 'case', value: $2, body: $4 }; }
+  | DEFAULT ':' statement_list
+    { console.log("  → default");
+      $$ = { type: 'default', body: $3 }; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   ESTRUTURAS DE REPETIÇÃO
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 while_statement
@@ -392,23 +611,13 @@ for_statement
       $$ = { type: 'for', init: $3, condition: $5, update: $7, body: $9 }; }
   ;
 
-/*
-  for_init NÃO inclui o ';' final — ele é separador explícito
-  na regra for_statement acima.
-*/
 for_init
   : /* vazio */
     { $$ = null; }
-  | type ID
-    { console.log("    → For: declaração de variável");
-      $$ = { type: 'declaration', varType: $1, name: $2 }; }
-  | type ID '=' expression
-    { console.log("    → For: declaração com inicialização");
-      $$ = { type: 'declaration', varType: $1, name: $2, init: $4 }; }
-  | ID '=' expression
-    { console.log("    → For: atribuição inicial");
-      $$ = { type: 'assignment', target: $1, op: '=', value: $3 }; }
-  | expression
+  | type declarator_list
+    { console.log("    → For init: declaração");
+      $$ = { type: 'declaration', varType: $1, declarators: $2 }; }
+  | for_expression_list
     { $$ = $1; }
   ;
 
@@ -420,20 +629,21 @@ for_cond
 for_update
   : /* vazio */
     { $$ = null; }
-  | ID '=' expression
-    { $$ = { type: 'assignment', target: $1, op: '=', value: $3 }; }
-  | ID ADD_ASSIGN expression
-    { $$ = { type: 'assignment', target: $1, op: '+=', value: $3 }; }
-  | ID SUB_ASSIGN expression
-    { $$ = { type: 'assignment', target: $1, op: '-=', value: $3 }; }
-  | expression
+  | for_expression_list
     { $$ = $1; }
   ;
 
-/* 
+for_expression_list
+  : expression
+    { $$ = $1; }
+  | for_expression_list ',' expression
+    { $$ = { type: 'comma', left: $1, right: $3 }; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   COMANDOS DE CONTROLE
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 return_statement
@@ -455,37 +665,50 @@ continue_statement
     { console.log("  → Continue"); $$ = { type: 'continue' }; }
   ;
 
-/* 
+goto_statement
+  : GOTO ID ';'
+    { console.log("  → Goto: " + $2); $$ = { type: 'goto', label: $2 }; }
+  ;
+
+label_statement
+  : ID ':' statement
+    { console.log("  → Label: " + $1); $$ = { type: 'label', name: $1, body: $3 }; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   DIRETIVAS DE PRÉ-PROCESSADOR
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 preprocessor_directive
   : DEFINE ID expression
     { console.log("  → #define: " + $2);
       $$ = { type: 'define', name: $2, value: $3 }; }
-
   | DEFINE ID
     { console.log("  → #define flag: " + $2);
       $$ = { type: 'define', name: $2, value: null }; }
-
-  | INCLUDE LT ID GT
+  | INCLUDE LT include_path GT
     { console.log("  → #include sistema: <" + $3 + ">");
       $$ = { type: 'include', file: $3, system: true }; }
-
   | INCLUDE STRING
     { console.log("  → #include local: " + $2);
       $$ = { type: 'include', file: $2, system: false }; }
   ;
 
-/* 
+include_path
+  : ID
+    { $$ = $1; }
+  | include_path '.' ID
+    { $$ = $1 + '.' + $3; }
+  | include_path '/' ID
+    { $$ = $1 + '/' + $3; }
+  ;
+
+/*
 ══════════════════════════════════════════════════════════════
   EXPRESSÕES
-  Inclui operadores de comparação e lógicos com precedência
-  declarada no cabeçalho — evita regra "condition" separada
-  e os conflitos que ela gerava.
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 arg_list
@@ -495,7 +718,6 @@ arg_list
   ;
 
 expression
-  /* ── Literais ─────────────────────────────────────────────── */
   : NUMBER
     { $$ = { type: 'number', value: $1 }; }
   | STRING
@@ -505,24 +727,43 @@ expression
   | ID
     { $$ = { type: 'id', name: $1 }; }
 
-  /* ── Chamadas de função — cobre malloc(), free(), etc. ────── */
   | ID '(' arg_list ')'
     { console.log("    → Chamada de função: " + $1 + "()");
       $$ = { type: 'call', name: $1, args: $3 }; }
 
-  /* ── Acesso a array ────────────────────────────────────────── */
-  | ID '[' expression ']'
-    { console.log("    → Acesso a array: " + $1 + "[...]");
+  | expression '[' expression ']'
+    { console.log("    → Índice de array/matriz");
       $$ = { type: 'index', array: $1, index: $3 }; }
 
-  /* ── Aritméticos ───────────────────────────────────────────── */
-  | expression '+' expression   { $$ = { type: '+',  left: $1, right: $3 }; }
-  | expression '-' expression   { $$ = { type: '-',  left: $1, right: $3 }; }
-  | expression '*' expression   { $$ = { type: '*',  left: $1, right: $3 }; }
-  | expression '/' expression   { $$ = { type: '/',  left: $1, right: $3 }; }
-  | expression '%' expression   { $$ = { type: '%',  left: $1, right: $3 }; }
+  | expression '.' ID
+    { console.log("    → Acesso a membro: ." + $3);
+      $$ = { type: 'member', object: $1, member: $3 }; }
+  | expression ARROW ID
+    { console.log("    → Acesso via ponteiro: ->" + $3);
+      $$ = { type: 'arrow', object: $1, member: $3 }; }
 
-  /* ── Comparação ────────────────────────────────────────────── */
+  | '(' type ')' expression         %prec UMINUS
+    { console.log("    → Cast: (" + $2 + ")");
+      $$ = { type: 'cast', castType: $2, expr: $4 }; }
+  | '(' type '*' ')' expression     %prec UMINUS
+    { console.log("    → Cast ponteiro: (" + $2 + "*)");
+      $$ = { type: 'cast', castType: $2 + '*', expr: $5 }; }
+  | '(' type '*' '*' ')' expression %prec UMINUS
+    { console.log("    → Cast ponteiro duplo: (" + $2 + "**)");
+      $$ = { type: 'cast', castType: $2 + '**', expr: $6 }; }
+
+  | expression '+' expression   { $$ = { type: '+', left: $1, right: $3 }; }
+  | expression '-' expression   { $$ = { type: '-', left: $1, right: $3 }; }
+  | expression '*' expression   { $$ = { type: '*', left: $1, right: $3 }; }
+  | expression '/' expression   { $$ = { type: '/', left: $1, right: $3 }; }
+  | expression '%' expression   { $$ = { type: '%', left: $1, right: $3 }; }
+
+  | expression LSHIFT expression  { $$ = { type: '<<', left: $1, right: $3 }; }
+  | expression RSHIFT expression  { $$ = { type: '>>', left: $1, right: $3 }; }
+  | expression '|' expression     { $$ = { type: '|',  left: $1, right: $3 }; }
+  | expression '^' expression     { $$ = { type: '^',  left: $1, right: $3 }; }
+  | expression '&' expression     { $$ = { type: '&',  left: $1, right: $3 }; }
+
   | expression EQ  expression
     { console.log("    → Operador =="); $$ = { type: '==', left: $1, right: $3 }; }
   | expression NEQ expression
@@ -531,12 +772,11 @@ expression
     { console.log("    → Operador <");  $$ = { type: '<',  left: $1, right: $3 }; }
   | expression GT  expression
     { console.log("    → Operador >");  $$ = { type: '>',  left: $1, right: $3 }; }
-  | expression LE   expression
+  | expression LE  expression
     { console.log("    → Operador <="); $$ = { type: '<=', left: $1, right: $3 }; }
-  | expression GE   expression
+  | expression GE  expression
     { console.log("    → Operador >="); $$ = { type: '>=', left: $1, right: $3 }; }
 
-  /* ── Lógicos ───────────────────────────────────────────────── */
   | expression AND expression
     { console.log("    → Operador &&"); $$ = { type: '&&', left: $1, right: $3 }; }
   | expression OR  expression
@@ -544,7 +784,6 @@ expression
   | NOT expression
     { $$ = { type: '!', expr: $2 }; }
 
-  /* ── Unários ───────────────────────────────────────────────── */
   | '-' expression %prec UMINUS
     { $$ = { type: 'neg', expr: $2 }; }
   | '~' expression
@@ -552,33 +791,55 @@ expression
   | '(' expression ')'
     { $$ = $2; }
 
-  /* ── Incremento / decremento ───────────────────────────────── */
-  | ID INC
-    { console.log("    → Pós-incremento: " + $1); $$ = { type: 'post++', var: $1 }; }
-  | ID DEC
-    { console.log("    → Pós-decremento: " + $1); $$ = { type: 'post--', var: $1 }; }
-  | INC ID
-    { console.log("    → Pré-incremento: " + $2); $$ = { type: 'pre++', var: $2 }; }
-  | DEC ID
-    { console.log("    → Pré-decremento: " + $2); $$ = { type: 'pre--', var: $2 }; }
+  | expression INC  %prec INC
+    { console.log("    → Pós-incremento"); $$ = { type: 'post++', expr: $1 }; }
+  | expression DEC  %prec DEC
+    { console.log("    → Pós-decremento"); $$ = { type: 'post--', expr: $1 }; }
+  | INC expression
+    { console.log("    → Pré-incremento"); $$ = { type: 'pre++', expr: $2 }; }
+  | DEC expression
+    { console.log("    → Pré-decremento"); $$ = { type: 'pre--', expr: $2 }; }
 
-  /* ── Ponteiros ─────────────────────────────────────────────── */
-  | '&' ID
-    { console.log("    → Endereço de: " + $2); $$ = { type: 'address_of', var: $2 }; }
-  | '*' ID %prec UMINUS
-    { console.log("    → Derreferência: *" + $2); $$ = { type: 'deref', var: $2 }; }
+  | '&' expression  %prec ADDR
+    { console.log("    → Endereço de"); $$ = { type: 'address_of', expr: $2 }; }
+  | '*' expression  %prec DEREF
+    { console.log("    → Derreferência"); $$ = { type: 'deref', expr: $2 }; }
 
-  /* ── sizeof ────────────────────────────────────────────────── */
+  | expression '='             expression
+    { console.log("    → Atribuição =");   $$ = { type: '=',   left: $1, right: $3 }; }
+  | expression ADD_ASSIGN      expression
+    { console.log("    → Atribuição +=");  $$ = { type: '+=',  left: $1, right: $3 }; }
+  | expression SUB_ASSIGN      expression
+    { console.log("    → Atribuição -=");  $$ = { type: '-=',  left: $1, right: $3 }; }
+  | expression MUL_ASSIGN      expression
+    { console.log("    → Atribuição *=");  $$ = { type: '*=',  left: $1, right: $3 }; }
+  | expression DIV_ASSIGN      expression
+    { console.log("    → Atribuição /=");  $$ = { type: '/=',  left: $1, right: $3 }; }
+  | expression MOD_ASSIGN      expression
+    { console.log("    → Atribuição %=");  $$ = { type: '%=',  left: $1, right: $3 }; }
+  | expression AND_ASSIGN      expression
+    { console.log("    → Atribuição &=");  $$ = { type: '&=',  left: $1, right: $3 }; }
+  | expression OR_ASSIGN       expression
+    { console.log("    → Atribuição |=");  $$ = { type: '|=',  left: $1, right: $3 }; }
+  | expression XOR_ASSIGN      expression
+    { console.log("    → Atribuição ^=");  $$ = { type: '^=',  left: $1, right: $3 }; }
+  | expression LSHIFT_ASSIGN   expression
+    { console.log("    → Atribuição <<="); $$ = { type: '<<=', left: $1, right: $3 }; }
+  | expression RSHIFT_ASSIGN   expression
+    { console.log("    → Atribuição >>="); $$ = { type: '>>=', left: $1, right: $3 }; }
+
   | SIZEOF '(' type ')'
-    { console.log("    → sizeof tipo"); $$ = { type: 'sizeof', arg: $3 }; }
-  | SIZEOF '(' ID ')'
-    { console.log("    → sizeof variável"); $$ = { type: 'sizeof', arg: $3 }; }
+    { console.log("    → sizeof tipo: " + $3); $$ = { type: 'sizeof', arg: $3 }; }
+  | SIZEOF '(' type '*' ')'
+    { console.log("    → sizeof tipo*: " + $3 + "*"); $$ = { type: 'sizeof', arg: $3 + '*' }; }
+  | SIZEOF '(' expression ')'
+    { console.log("    → sizeof expressão"); $$ = { type: 'sizeof_expr', arg: $3 }; }
   ;
 
-/* 
+/*
 ══════════════════════════════════════════════════════════════
   BLOCO
-══════════════════════════════════════════════════════════════ 
+══════════════════════════════════════════════════════════════
 */
 
 block
