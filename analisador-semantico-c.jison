@@ -4,8 +4,289 @@
 */
 
 %{
-  function testeFuncao() {
-    console.log("Hello world")
+  class Variable {
+    constructor(name, type, scopeId, value = null) {
+      this.name = name
+      this.type = type
+      this.scopeId = scopeId
+      this.value = value
+    }
+  }
+
+  class Scope {
+    constructor(id, name, parent, depth, entry = null) {
+      this.id = id
+      this.name = name
+      this.parent = parent
+      this.depth = depth
+      this.entry = entry
+      this.exit = null
+      this.variables = new Map()
+    }
+  }
+
+  class ScopeAnalyzer {
+    constructor() {
+      this.scopes = []
+      this.stack = []
+      this.nextScopeId = 0
+      this.time = 0 // famoso contador de escopo
+    }
+
+    _tick() {
+      this.time += 1
+      return this.time
+    }
+
+    openScope(name) {
+      const parent = this.stack.length > 0
+        ? this.stack[this.stack.length - 1]
+        : null
+
+      const depth = parent ? parent.depth + 1 : 0
+
+      const scope = new Scope(
+        this.nextScopeId,
+        name,
+        parent,
+        depth,
+        this._tick()
+      )
+
+      this.nextScopeId += 1
+
+      this.scopes.push(scope)
+      this.stack.push(scope)
+
+      console.log(`\nABRIU ESCOPO: ${scope.name}`)
+      console.log(
+        ` id=${scope.id}, profundidade=${scope.depth}, entrada=${scope.entry}`
+      )
+
+      return scope
+    }
+
+    closeScope() {
+      const scope = this.stack.pop()
+
+      scope.exit = this._tick()
+
+      console.log(`\nFECHOU ESCOPO: ${scope.name}`)
+      console.log(
+        ` id=${scope.id}, entrada=${scope.entry}, saída=${scope.exit}`
+      )
+
+      return scope
+    }
+
+    currentScope() {
+      return this.stack[this.stack.length - 1]
+    }
+
+    declareVar(type, name, value = null) {
+      const scope = this.currentScope()
+
+      console.log(
+        `\nDECLARAÇÃO: ${type} ${name}` +
+        (value !== null ? ` = ${value}` : "")
+      )
+
+      console.log(` Escopo atual: ${scope.name} id=${scope.id}`)
+
+      if (scope.variables.has(name)) {
+        console.log(
+          ` ERRO: variável '${name}' já declarada neste mesmo escopo.`
+        )
+        return null
+      }
+
+      const variable = new Variable(
+        name,
+        type,
+        scope.id,
+        value
+      )
+
+      scope.variables.set(name, variable)
+
+      console.log(
+        ` OK: variável '${name}' registrada no escopo ${scope.id}.`
+      )
+
+      return variable
+    }
+
+    isTypeCompatible(targetType, sourceType) {
+      // mesmos tipos
+      if (targetType === sourceType) {
+        return true
+      }
+
+      // int pode virar float
+      if (targetType === "float" && sourceType === "int") {
+        return true
+      }
+
+      return false
+    }
+
+    inferType(value) {
+      if (typeof value === "boolean") {
+        return "bool"
+      }
+
+      if (typeof value === "string") {
+        return "string"
+      }
+
+      if (typeof value === "number") {
+        return Number.isInteger(value)
+          ? "int"
+          : "float"
+      }
+
+      return "unknown"
+    }
+
+    resolveVar(name) {
+      console.log(` Procurando variável '${name}'...`)
+
+      for (let i = this.stack.length - 1; i >= 0; i--) {
+        const scope = this.stack[i]
+
+        if (scope.variables.has(name)) {
+          const variable = scope.variables.get(name)
+
+          console.log(
+            ` Encontrada '${name}' no escopo ${scope.name} ` +
+            `id=${scope.id}, profundidade=${scope.depth}, valor=${variable.value}`
+          )
+
+          return [variable, scope]
+        }
+      }
+
+      console.log(
+        ` ERRO: variável '${name}' não declarada ou fora de escopo.`
+      )
+
+      return [null, null]
+    }
+
+    assignExpression(targetName, expressionTokens) {
+      const current = this.currentScope()
+
+      console.log("\nATRIBUIÇÃO:")
+      console.log(
+        ` Comando: ${targetName} = ${expressionTokens.join(" ")}`
+      )
+
+      console.log(
+        ` Escopo de uso: ${current.name} id=${current.id}`
+      )
+
+      const [targetVar, targetScope] = this.resolveVar(targetName)
+
+      if (targetVar === null) {
+        console.log(
+          ` ERRO: lado esquerdo '${targetName}' não é visível.`
+        )
+        return
+      }
+
+      const valuesForEval = []
+
+      for (const token of expressionTokens) {
+        if (["+", "-", "*", "/", "(", ")"].includes(token)) {
+          valuesForEval.push(token)
+        } else if (!isNaN(token)) {
+          valuesForEval.push(token)
+        } else {
+          const [variable] = this.resolveVar(token)
+
+          if (variable === null) {
+            console.log(
+              ` ERRO: variável '${token}' não é visível na expressão.`
+            )
+            return
+          }
+
+          if (variable.value === null) {
+            console.log(
+              ` ERRO: variável '${token}' não possui valor definido.`
+            )
+            return
+          }
+
+          valuesForEval.push(String(variable.value))
+        }
+      }
+
+      const expressionAsText = valuesForEval.join(" ")
+
+      let result
+
+      try {
+        result = eval(expressionAsText)
+        const resultType = this.inferType(result)
+
+        console.log(` Tipo do resultado: ${resultType}`)
+
+        if (!this.isTypeCompatible(targetVar.type, resultType)) {
+          console.log(
+            ` ERRO DE TIPOS: não é possível atribuir '${resultType}' em '${targetVar.type}'.`
+          )
+          return
+        }
+      } catch (error) {
+        console.log(` ERRO ao calcular expressão: ${error}`)
+        return
+      }
+
+      console.log(
+        ` Expressão resolvida: ${expressionTokens.join(" ")}`
+      )
+
+      console.log(` Expressão numérica: ${expressionAsText}`)
+      console.log(` Resultado: ${result}`)
+
+      const oldValue = targetVar.value
+
+      targetVar.value = result
+
+      console.log(
+        ` Atribuição válida: '${targetName}' do escopo ${targetScope.id} ` +
+        `mudou de ${oldValue} para ${targetVar.value}`
+      )
+    }
+
+    printScopeTable() {
+      console.log("\n" + "=".repeat(30))
+      console.log("TABELA DE ESCOPOS")
+      console.log("=".repeat(30))
+
+      for (const scope of this.scopes) {
+        const parentId = scope.parent
+          ? scope.parent.id
+          : null
+
+        console.log(
+          `Escopo id=${scope.id}, nome=${scope.name}, pai=${parentId}, ` +
+          `profundidade=${scope.depth}, entrada=${scope.entry}, saída=${scope.exit}`
+        )
+
+        if (scope.variables.size > 0) {
+          for (const variable of scope.variables.values()) {
+            console.log(
+              ` variável ${variable.name}, valor=${variable.value}, ` +
+              `declarada no escopo ${variable.scopeId}`
+            )
+          }
+        } else {
+          console.log(" nenhuma variável declarada")
+        }
+      }
+    }
   }
 %}
 
@@ -154,14 +435,16 @@
 
 program
   : statement_list EOF {
-    testeFuncao();
-    console.log("Programa reconhecido com sucesso!"); 
+    analyzer.closeScope()
+    analyzer.printScopeTable();
     return $1;
   }
   ;
 
 statement_list
   : /* vazio */ { 
+    analyzer = new ScopeAnalyzer();
+    analyzer.openScope("global");
     $$ = []; 
   } | statement_list statement { 
     $$ = $1.concat([$2]); 
