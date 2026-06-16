@@ -666,6 +666,7 @@
   }
 
   /* Instância global do analisador */
+  console.clear()
   var analyzer = null
 %}
 
