@@ -229,6 +229,15 @@
 
     /* ── Busca de símbolo (resolução léxica) ── */
     resolveVar(name) {
+      const sym = this.tryResolve(name)
+      if (!sym) {
+        this._semanticError("identificador '" + name + "' não declarado")
+      }
+      return sym
+    }
+
+    /* ── Busca silenciosa (não registra erro se não encontrar) ── */
+    tryResolve(name) {
       for (let i = this.stack.length - 1; i >= 0; i--) {
         const scope = this.stack[i]
         if (scope.symbols.has(name)) {
@@ -238,7 +247,6 @@
           return sym
         }
       }
-      this._semanticError("identificador '" + name + "' não declarado")
       return null
     }
 
@@ -414,7 +422,7 @@
         case 'call': {
           // Resolve função: aceita funções não declaradas como externas (printf, etc.)
           let retType = 'int'
-          const sym = this.resolveVar(node.value)
+          const sym = this.tryResolve(node.value)
           if (sym && sym.kind === 'func') {
             retType = sym.type
           }
@@ -820,6 +828,9 @@ program
       analyzer.printSymbolTable();
       analyzer.codeGen.printCode();
       analyzer.printErrors();
+      if (analyzer.errors.length > 0) {
+        throw new Error('Erros semânticos encontrados: ' + analyzer.errors.length);
+      }
       return $1;
     }
   ;

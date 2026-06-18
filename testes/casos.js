@@ -8,7 +8,7 @@
 */
 
 module.exports = [
-  /* ───────── Definição/declaração de funções (o bug corrigido) ───────── */
+  /* ───────── Definição/declaração de funções e variáveis ───────── */
   {
     nome: 'Protótipo sem parâmetros',
     esperado: 'aceita',
@@ -77,5 +77,12 @@ int* aloca(int n) {
     esperado: 'rejeita',
     codigo: `int main() {
   int n1 = 12;`,
+  },
+  {
+    nome: 'Variável não declarada',
+    esperado: 'rejeita',
+    codigo: `int main() {
+  int n1 = n2;
+}`,
   },
 ];
