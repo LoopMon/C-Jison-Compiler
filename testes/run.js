@@ -65,7 +65,11 @@ if (!fs.existsSync(dirGerado)) fs.mkdirSync(dirGerado);
 const caminhoParser = path.join(dirGerado, 'parser.js');
 fs.writeFileSync(caminhoParser, parserGerado);
 
-const casos = require('./casos.js');
+// Seleciona os casos de teste conforme o analisador.
+const arquivoCasos = gramaticaArg.includes('sintatico')
+  ? './casos-sintatico.js'
+  : './casos-semantico.js';
+const casos = require(arquivoCasos);
 
 // Recarrega o parser do zero para isolar o estado global entre casos.
 function parserNovo() {

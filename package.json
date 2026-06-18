@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Analisador léxico, sintático e semântico para C simplificado usando Jison",
   "scripts": {
-    "test": "node testes/run.js",
-    "test:sintatico": "node testes/run.js analisador-sintatico-c.jison"
+    "test": "npm run test:sintatico && npm run test:semantico",
+    "test:sintatico": "node testes/run.js analisador-sintatico-c.jison",
+    "test:semantico": "node testes/run.js analisador-semantico-c.jison"
   },
   "devDependencies": {
     "jison": "0.4.18"

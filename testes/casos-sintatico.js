@@ -1,14 +1,16 @@
 /*
-  Casos de teste da gramática.
+  Casos de teste do ANALISADOR SINTÁTICO.
 
-  Cada caso tem:
-    - nome:     descrição curta
-    - esperado: 'aceita' (deve parsear sem erro) ou 'rejeita' (deve dar erro de sintaxe)
-    - codigo:   o trecho de código C a ser analisado
+  Verifica apenas a ESTRUTURA GRAMATICAL do código:
+    - Tokens na ordem correta
+    - Delimitadores balanceados (parênteses, chaves, colchetes)
+    - Construções válidas da linguagem
+
+  NÃO verifica semântica (variáveis declaradas, tipos, etc.).
 */
 
 module.exports = [
-  /* ───────── Definição/declaração de funções e variáveis ───────── */
+  /* ───────── Casos que DEVEM ser aceitos (sintaxe válida) ───────── */
   {
     nome: 'Protótipo sem parâmetros',
     esperado: 'aceita',
@@ -58,8 +60,15 @@ int* aloca(int n) {
   int x = n;
 }`,
   },
+  {
+    nome: 'Uso de identificador não declarado (válido sintaticamente)',
+    esperado: 'aceita',
+    codigo: `int main() {
+  int n1 = n2;
+}`,
+  },
 
-  /* ───────── Casos que DEVEM ser rejeitados ───────── */
+  /* ───────── Casos que DEVEM ser rejeitados (erro de sintaxe) ───────── */
   {
     nome: 'Declaração sem identificador',
     esperado: 'rejeita',
@@ -79,10 +88,22 @@ int* aloca(int n) {
   int n1 = 12;`,
   },
   {
-    nome: 'Variável não declarada',
+    nome: 'Ponto e vírgula ausente',
     esperado: 'rejeita',
     codigo: `int main() {
-  int n1 = n2;
+  int n1 = 12
 }`,
+  },
+  {
+    nome: 'Parêntese não fechado na chamada',
+    esperado: 'rejeita',
+    codigo: `int main() {
+  printf("hello";
+}`,
+  },
+  {
+    nome: 'Dois tipos seguidos',
+    esperado: 'rejeita',
+    codigo: `int float x;`,
   },
 ];
