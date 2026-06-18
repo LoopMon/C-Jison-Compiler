@@ -1050,100 +1050,101 @@ param_list
 
 param
   : type ID {
+      analyzer.declareVar($1, $2, null, 'param');
       $$ = { paramType: $1, name: $2 };
     }
   | type '*' ID {
+      analyzer.declareVar($1 + '*', $3, null, 'param');
       $$ = { paramType: $1 + '*', name: $3 };
     }
   | type '*' '*' ID {
+      analyzer.declareVar($1 + '**', $4, null, 'param');
       $$ = { paramType: $1 + '**', name: $4 };
     }
   | type ID '[' ']' {
+      analyzer.declareVar($1 + '[]', $2, null, 'param');
       $$ = { paramType: $1 + '[]', name: $2 };
     }
   | type ID '[' ']' '[' expression ']' {
+      analyzer.declareVar($1 + '[][]', $2, null, 'param');
       $$ = { paramType: $1 + '[][]', name: $2 };
     }
   | type '*' ID '[' ']' {
+      analyzer.declareVar($1 + '*[]', $3, null, 'param');
       $$ = { paramType: $1 + '*[]', name: $3 };
     }
   ;
 
 /*
-  Produção auxiliar: abre o escopo da função e declara os
-  parâmetros no momento certo (antes de analisar o corpo).
-  Necessário porque o Jison não suporta ações intermediárias
-  arbitrárias; usamos uma produção vazia posicionada.
+  Marcador vazio que abre o escopo da função logo após '('.
+  Como TODAS as produções de função passam por 'open_scope' no
+  mesmo ponto, não há conflito reduce/reduce (ao contrário da
+  versão antiga, que mantinha dois caminhos distintos para os
+  parâmetros: 'param_list' direto para protótipos e
+  'function_scope function_params' para definições). Esse conflito
+  fazia o Jison rejeitar 'int f();' e 'int f(int a){...}').
 */
-function_scope
+open_scope
   : /* vazio */ {
       analyzer.openScope("function");
     }
   ;
 
-function_body
-  : '{' statement_list '}'
-  ;
-
-function_params
-  : param_list {
-      for (const p of $1) {
-        analyzer.declareVar(p.paramType, p.name, null, 'param');
-      }
-      $$ = $1;
+/*
+  Cauda da função: distingue protótipo (';') de definição
+  ('{ ... }') por um único token de lookahead — totalmente
+  compatível com LALR(1).
+*/
+func_tail
+  : ';' {
+      $$ = { proto: true, body: [] };
+    }
+  | '{' statement_list '}' {
+      $$ = { proto: false, body: $2 };
     }
   ;
 
 function_definition
-  /* tipo retorno ID ( void ) { body } */
-  : type ID '(' VOID ')' function_scope function_body {
-      /* Registra a função no escopo pai (que ainda está no stack antes do closeScope) */
-      analyzer.closeScope();
-      /* Tenta registrar no escopo global/pai após fechar o escopo da função */
-      /* (o escopo pai é restaurado pelo closeScope) */
-      analyzer.declareVar($1, $2, null, 'func');
-      $$ = { type: 'func_def', retType: $1, name: $2, params: [] };
-    }
-
-  | type '*' ID '(' VOID ')' function_scope function_body {
-      analyzer.closeScope();
-      analyzer.declareVar($1 + '*', $3, null, 'func');
-      $$ = { type: 'func_def', retType: $1 + '*', name: $3, params: [] };
-    }
-
-  /* protótipos sem parâmetros */
-  | type ID '(' VOID ')' ';' {
-      analyzer.declareVar($1, $2, null, 'func');
-      $$ = { type: 'func_proto', retType: $1, name: $2, params: [] };
-    }
-
-  | type '*' ID '(' VOID ')' ';' {
-      analyzer.declareVar($1 + '*', $3, null, 'func');
-      $$ = { type: 'func_proto', retType: $1 + '*', name: $3, params: [] };
-    }
-
-  /* com parâmetros */
-  | type ID '(' function_scope function_params ')' function_body {
+  /*
+    Funções e protótipos com lista de parâmetros (que pode ser
+    vazia, cobrindo 'int f()'). Os parâmetros se auto-declaram em
+    'param' porque 'open_scope' já abriu o escopo da função.
+  */
+  : type ID '(' open_scope param_list ')' func_tail {
       analyzer.closeScope();
       analyzer.declareVar($1, $2, null, 'func');
-      $$ = { type: 'func_def', retType: $1, name: $2, params: $5 };
+      $$ = {
+        type: $7.proto ? 'func_proto' : 'func_def',
+        retType: $1, name: $2, params: $5, body: $7.body
+      };
     }
 
-  | type '*' ID '(' function_scope function_params ')' function_body {
+  | type '*' ID '(' open_scope param_list ')' func_tail {
       analyzer.closeScope();
       analyzer.declareVar($1 + '*', $3, null, 'func');
-      $$ = { type: 'func_def', retType: $1 + '*', name: $3, params: $6 };
+      $$ = {
+        type: $8.proto ? 'func_proto' : 'func_def',
+        retType: $1 + '*', name: $3, params: $6, body: $8.body
+      };
     }
 
-  /* protótipos com parâmetros */
-  | type ID '(' param_list ')' ';' {
+  /* Funções e protótipos com 'void' explícito */
+  | type ID '(' open_scope VOID ')' func_tail {
+      analyzer.closeScope();
       analyzer.declareVar($1, $2, null, 'func');
-      $$ = { type: 'func_proto', retType: $1, name: $2, params: $4 };
+      $$ = {
+        type: $7.proto ? 'func_proto' : 'func_def',
+        retType: $1, name: $2, params: [], body: $7.body
+      };
     }
 
-  | type '*' ID '(' param_list ')' ';' {
+  | type '*' ID '(' open_scope VOID ')' func_tail {
+      analyzer.closeScope();
       analyzer.declareVar($1 + '*', $3, null, 'func');
-      $$ = { type: 'func_proto', retType: $1 + '*', name: $3, params: $5 };
+      $$ = {
+        type: $8.proto ? 'func_proto' : 'func_def',
+        retType: $1 + '*', name: $3, params: [], body: $8.body
+      };
     }
   ;
 
@@ -1601,7 +1602,7 @@ expression
   open_block e close_block gerenciam escopo de bloco.
   A produção 'block' sem escopo próprio é mantida para
   compatibilidade com os locais onde não há controle de escopo
-  explícito (ex.: corpo de funções via function_body).
+  explícito (ex.: corpo de funções via func_tail).
 ══════════════════════════════════════════════════════════════
 */
 
